@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from openai import OpenAI
 
 import httpx
+
+from obsidian_rag_mcp.rag_core.vector_store import SQLiteVectorStore
 
 LOG = logging.getLogger(__name__)
 
@@ -13,22 +16,30 @@ class OpenAICompatibleClient:
         self.base_url = base_url.rstrip("/")
         self.model = model
 
-    def chat(self, prompt: str, images: list[str] | None = None) -> str:
-        payload = {
-            "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
-        }
-        if images:
-            payload["messages"][0]["content"] = prompt + "\n\n" + "\n".join(images)
-        try:
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.post(f"{self.base_url}/v1/chat/completions", json=payload)
-            if resp.status_code < 400:
-                data = resp.json()
-                return data["choices"][0]["message"]["content"]
-        except Exception as exc:
-            LOG.warning("LLM API call failed, using fallback generation: %s", exc)
-        return prompt[:2000]
+    def chat(self, prompt: str, images: list[str] | None = None, generation_mode: str = 'openai') -> str:
+
+        if generation_mode == 'openai':
+            client = OpenAI()
+
+            model = "gpt-5.4-mini"
+            response = client.responses.create(
+                model=model,
+                input=prompt
+            )
+            return response.output_text
+
+        else:
+            try:
+                client = OpenAI(base_url=self.base_url)
+
+                response = client.responses.create(
+                    input=prompt
+                )
+
+                return response.output_text
+            except Exception as e:
+                LOG.error(e)
+                return self.chat(prompt, images, 'openai')
 
 
 def transcribe_audio_fallback(audio_path: Path) -> str:

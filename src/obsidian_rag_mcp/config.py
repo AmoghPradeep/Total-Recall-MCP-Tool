@@ -22,7 +22,8 @@ class ModelConfig(BaseModel):
 class AppConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="OBRAG_", env_file=".env", extra="ignore")
 
-    vault_path: Path = Field(default=Path("./vault"))
+    transcribe_local: bool = Field(default=False)
+    vault_path: Path = Field(default=Path(r"C:\Users\Welcome\Documents\amogh-brain"))
     audio_watch_path: Path = Field(default=Path("./incoming/audio"))
     pdf_watch_path: Path = Field(default=Path("./incoming/pdf"))
     db_path: Path = Field(default=Path("./data/rag.sqlite3"))

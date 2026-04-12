@@ -29,18 +29,24 @@ class BackgroundWorker:
         self.asr_runtime = ASRRuntimeManager(config.models.asr_model)
         self.llm_client = OpenAICompatibleClient(config.models.llm_service_url, config.models.generation_model)
         self.tag_catalog = TagCatalog(self.vector_store)
+        self.transcribe_local = self.config.transcribe_local
 
     def scan_once(self) -> dict[str, int]:
         return scan_and_enqueue(self.config.audio_watch_path, self.config.pdf_watch_path, self.queue)
 
     def process_queue_once(self) -> dict[str, int]:
         jobs = self.queue.pop_all()
+        job_count = len(jobs)
+        iteration = 1
+
         metrics = {"processed": 0, "errors": 0, "indexed_chunks": 0}
         for job in jobs:
+            is_last_job = False
+            if iteration == job_count:
+                is_last_job = True
             source = Path(job.source_path)
-            output_name = source.stem + ".md"
-            out_path = self.config.vault_path / output_name
-            result = self._run_job_with_retry(job.job_type, source, out_path)
+            out_path = self.config.vault_path
+            result = self._run_job_with_retry(job.job_type, source, out_path, is_last_job)
             if result.success and result.output_doc:
                 text = result.output_doc.read_text(encoding="utf-8")
                 count = index_markdown_document(
@@ -55,16 +61,17 @@ class BackgroundWorker:
                 metrics["processed"] += 1
             else:
                 metrics["errors"] += 1
+            iteration += 1
         return metrics
 
-    def run_forever(self, poll_seconds: float = 2.0) -> None:
+    def run_forever(self, poll_seconds: float = 30) -> None:
         while True:
             queued = self.scan_once()
             metrics = self.process_queue_once()
             LOG.info("scan=%s metrics=%s", queued, metrics)
             time.sleep(poll_seconds)
 
-    def _run_job_with_retry(self, job_type: str, source: Path, out_path: Path, retries: int = 2):
+    def _run_job_with_retry(self, job_type: str, source: Path, out_path: Path, retries: int = 2, is_last_job: bool = False):
         image_dir = self.config.vault_path / ".tmp_pages"
         last_result = None
         for attempt in range(retries + 1):
@@ -76,6 +83,8 @@ class BackgroundWorker:
                     llm_runtime=self.llm_runtime,
                     llm_client=self.llm_client,
                     tag_catalog=self.tag_catalog,
+                    is_last_job=is_last_job,
+                    transcribe_local=self.transcribe_local,
                 )
             else:
                 last_result = process_pdf_to_markdown(

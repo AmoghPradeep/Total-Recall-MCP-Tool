@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import math
+import time
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from obsidian_rag_mcp.models import Chunk, RetrievalResult
 from obsidian_rag_mcp.rag_core.vector_store.base import VectorStore
@@ -50,6 +52,81 @@ class SQLiteVectorStore(VectorStore):
                 )
                 """
             )
+
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS usage_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    model TEXT NOT NULL,
+                    ts INTEGER NOT NULL,
+                    prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                    completion_tokens INTEGER NOT NULL DEFAULT 0,
+                    total_tokens INTEGER NOT NULL DEFAULT 0,
+                    raw_json TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_usage_logs_model_ts
+                ON usage_logs(model, ts)
+                """
+            )
+
+    def add_usage_log(
+            self,
+            model: str,
+            prompt_tokens: int,
+            completion_tokens: int,
+            total_tokens: int | None = None,
+            ts: int | None = None,
+            raw_usage: dict[str, Any] | None = None,
+    ) -> None:
+        """
+        Store one usage event from OpenAI.
+        ts is UTC epoch seconds. If omitted, uses current time.
+        """
+        if total_tokens is None:
+            total_tokens = prompt_tokens + completion_tokens
+        if ts is None:
+            ts = int(time.time())
+
+        raw_json = json.dumps(raw_usage) if raw_usage is not None else None
+
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO usage_logs (model, ts, prompt_tokens, completion_tokens, total_tokens, raw_json)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (model, ts, prompt_tokens, completion_tokens, total_tokens, raw_json),
+            )
+
+    def get_usage_sum_last_24h(self, model: str) -> dict[str, int]:
+        """
+        Sum usage for the past 24 hours for one model.
+        Returns prompt_tokens, completion_tokens, total_tokens.
+        """
+        cutoff = int(time.time()) - 24 * 60 * 60
+
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COALESCE(SUM(prompt_tokens), 0)     AS prompt_tokens,
+                       COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+                       COALESCE(SUM(total_tokens), 0)      AS total_tokens
+                FROM usage_logs
+                WHERE model = ?
+                  AND ts >= ?
+                """,
+                (model, cutoff),
+            ).fetchone()
+
+        return {
+            "prompt_tokens": int(row["prompt_tokens"]),
+            "completion_tokens": int(row["completion_tokens"]),
+            "total_tokens": int(row["total_tokens"]),
+        }
 
     def upsert_chunks(self, chunks: list[Chunk], vectors: list[list[float]]) -> None:
         if len(chunks) != len(vectors):

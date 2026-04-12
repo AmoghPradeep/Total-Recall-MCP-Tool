@@ -4,12 +4,13 @@ import hashlib
 import random
 import time
 from typing import Iterable
+from openai import OpenAI
 
 import httpx
 
 
 class EmbeddingService:
-    def __init__(self, base_url: str, model: str, retries: int = 3, backoff_seconds: float = 0.5, batch_size: int = 16) -> None:
+    def __init__(self, base_url: str, model: str, retries: int = 2, backoff_seconds: float = 0.5, batch_size: int = 16) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.retries = retries
@@ -27,14 +28,19 @@ class EmbeddingService:
         attempt = 0
         while True:
             try:
-                with httpx.Client(timeout=20.0) as client:
-                    resp = client.post(
-                        f"{self.base_url}/v1/embeddings",
-                        json={"model": self.model, "input": batch},
-                    )
-                if resp.status_code < 400:
-                    data = resp.json().get("data", [])
-                    return [item.get("embedding", []) for item in data]
+                client = OpenAI()
+
+                response = client.embeddings.create(
+                    input= batch,
+                    model="text-embedding-3-large"
+                )
+
+                embeddings: list[list[float]] = [
+                    item.embedding
+                    for item in sorted(response.data, key=lambda x: x.index)
+                ]
+                return embeddings
+
             except Exception:
                 pass
 

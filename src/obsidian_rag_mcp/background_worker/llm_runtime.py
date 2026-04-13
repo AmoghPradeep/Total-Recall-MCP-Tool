@@ -29,8 +29,6 @@ class LLMRuntimeManager:
             return False
 
     def ensure_generation_mode(self) -> str:
-        if self.service_is_healthy():
-            return "api"
         return "openai"
 
     def load_local_model(self) -> None:

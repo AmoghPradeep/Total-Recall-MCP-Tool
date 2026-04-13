@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 import shutil
+import tempfile
 from pathlib import Path
 
 from obsidian_rag_mcp.background_worker.audio_pipeline import process_audio_to_markdown
@@ -52,7 +53,7 @@ class BackgroundWorker:
                 self.vector_store.upsert_doc_hash(job.source_path, hash_)
             else:
                 continue
-            dest_dir = self.config.vault_path / "z.rawdata"
+            dest_dir = self.config.vault_path / "z.rawdata" / job.job_type
             dest_dir.mkdir(parents=True, exist_ok=True)
             hashed_name = f"{source.stem}_{hash_}{source.suffix}"
             shutil.copy(source, dest_dir / hashed_name)
@@ -85,7 +86,7 @@ class BackgroundWorker:
             time.sleep(poll_seconds)
 
     def _run_job_with_retry(self, job_type: str, source: Path, out_path: Path, retries: int = 2, is_last_job: bool = False):
-        image_dir = self.config.vault_path / ".tmp_pages"
+        image_dir = Path(tempfile.gettempdir()) / "obrag_pdf_pages"
         last_result = None
         for attempt in range(retries + 1):
             if job_type == "audio":

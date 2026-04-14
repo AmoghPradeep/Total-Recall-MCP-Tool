@@ -131,7 +131,7 @@ def test_mcp_update_markdown_note_success_and_ambiguity(tmp_path: Path, monkeypa
     tools = MCPTools(cfg)
     runtime = MCPRuntime(tools)
 
-    def fake_chat_success(prompt: str, images=None, generation_mode="openai", allow_local_fallback=True, require_success=False):
+    def fake_chat_success(prompt: str, images=None, require_success=False):
         if "Pick the best markdown file" in prompt:
             escaped = str(target).replace("\\", "\\\\")
             return f'{{"selected_path":"{escaped}","confidence":0.95}}'

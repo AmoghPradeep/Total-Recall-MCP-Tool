@@ -28,7 +28,7 @@ def test_pdf_ingestion_end_to_end(tmp_path: Path, monkeypatch) -> None:
         lambda _pdf, image_dir: [image_dir / "page-1.jpg"],
     )
 
-    def fake_chat(prompt: str, images=None, generation_mode="openai", allow_local_fallback=True, require_success=False):
+    def fake_chat(prompt: str, images=None, require_success=False):
         if "extracting content from a handwritten-notes PDF page image" in prompt:
             return "- handwritten bullet"
         if "reducing per-page extracted notes" in prompt:

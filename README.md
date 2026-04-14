@@ -40,7 +40,7 @@ The flow looks like this:
 Today, the main ingestion paths are:
 
 - audio files such as voice notes
-- PDF documents, including handwritten or scanned material when the extraction model can interpret them
+- PDF documents and exported image folders, including handwritten or scanned material when the API model can interpret them
 
 ## Core Experience
 
@@ -56,7 +56,7 @@ That is the core value of this project: persistent memory that compounds over ti
 
 ## Current Capabilities
 
-- Background ingestion for audio and PDF sources
+- Background ingestion for audio, PDF, and multi-image note exports
 - Markdown normalization and vault-safe note creation
 - Semantic retrieval over indexed vault content
 - MCP tool support for context retrieval
@@ -64,14 +64,14 @@ That is the core value of this project: persistent memory that compounds over ti
 
 ## In Progress
 
-The next major step in OpenSpec is expanding ingestion beyond PDFs into folders of ordered page images, such as Apple Notes exports, while continuing the shift toward a Linux-first deployment model.
+The current implementation covers audio files, PDFs, and folders of ordered page images such as Apple Notes exports, with Linux as the primary deployment target.
 
 ## Who This Is For
 
 - people building personal knowledge systems around Obsidian
 - developers experimenting with MCP-connected agents
 - anyone who wants voice notes and handwritten material to become usable agent memory
-- local-first users who want their knowledge stored in files they control
+- users who want their knowledge stored in files they control
 
 ## Quick Start
 

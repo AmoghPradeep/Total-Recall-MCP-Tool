@@ -30,10 +30,10 @@ class MCPTools:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
         self.store = SQLiteVectorStore(config.db_path)
-        self.embeddings = EmbeddingService(config.models.llm_service_url, config.models.embedding_model)
+        self.embeddings = EmbeddingService(config.models.api_base_url, config.models.embedding_model)
         self.manifest = VaultManifest(config.manifest_path)
         self.retrieval = RetrievalService(self.embeddings, self.store)
-        self.llm_client = OpenAICompatibleClient(config.models.llm_service_url, config.models.generation_model)
+        self.llm_client = OpenAICompatibleClient(config.models.api_base_url, config.models.generation_model)
 
     def reindex_vault_delta(self) -> dict:
         previous = self.manifest.load()
@@ -192,7 +192,7 @@ Update context: {update_context}
 Candidates:
 {listed}
 """
-        raw = self.llm_client.chat(prompt, generation_mode="openai", allow_local_fallback=True, require_success=False)
+        raw = self.llm_client.chat(prompt, require_success=False)
         try:
             parsed = json.loads(_strip_fence(raw))
             selected = str(parsed.get("selected_path", "")).strip()
@@ -215,7 +215,7 @@ Context: {update_context}
 NOTE:
 {content[:16000]}
 """
-        return self.llm_client.chat(prompt, generation_mode="openai", allow_local_fallback=True, require_success=True).strip()
+        return self.llm_client.chat(prompt, require_success=True).strip()
 
     def _generate_tags(self, content: str, update_context: str) -> list[str]:
         prompt = f"""
@@ -226,7 +226,7 @@ Context: {update_context}
 NOTE:
 {content[:12000]}
 """
-        raw = self.llm_client.chat(prompt, generation_mode="openai", allow_local_fallback=True, require_success=True)
+        raw = self.llm_client.chat(prompt, require_success=True)
         tags = [t.strip().lower().replace(" ", "-") for t in raw.split(",") if t.strip()]
         return sorted(set(tags))[:8]
 
@@ -250,7 +250,7 @@ Note reference: {note_reference}
 Update context: {update_context}
 Existing directories: {dirs_list}
 """
-        raw = self.llm_client.chat(prompt, generation_mode="openai", allow_local_fallback=True, require_success=False).strip()
+        raw = self.llm_client.chat(prompt, require_success=False).strip()
         cleaned = raw.splitlines()[0].strip() if raw else current_rel
         return cleaned or current_rel
 

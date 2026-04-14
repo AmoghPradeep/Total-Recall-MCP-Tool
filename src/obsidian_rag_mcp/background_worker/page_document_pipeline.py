@@ -34,8 +34,6 @@ def process_page_images_to_markdown(
         page_summary = llm_client.chat(
             page_prompt,
             images=[str(image)],
-            generation_mode="openai",
-            allow_local_fallback=True,
             require_success=True,
         )
         page_summaries.append(f"## Page {idx}\n{page_summary}\n")
@@ -43,8 +41,6 @@ def process_page_images_to_markdown(
     full_content = "\n".join(page_summaries)
     reduced_summary = llm_client.chat(
         get_pdf_reduce_prompt(full_content),
-        generation_mode="openai",
-        allow_local_fallback=True,
         require_success=True,
     )
     tags = _choose_tags(full_content + "\n" + reduced_summary, llm_client, tag_catalog)
@@ -58,8 +54,6 @@ def process_page_images_to_markdown(
     )
     json_response = llm_client.chat(
         prompt,
-        generation_mode="openai",
-        allow_local_fallback=True,
         require_success=True,
     )
 
@@ -88,8 +82,6 @@ def _choose_tags(content: str, llm_client: OpenAICompatibleClient, tag_catalog: 
     catalog_hint = ", ".join(catalog[:30]) if catalog else "(none)"
     raw = llm_client.chat(
         get_pdf_tags_prompt(catalog_hint, content[:6000]),
-        generation_mode="openai",
-        allow_local_fallback=True,
         require_success=True,
     )
     candidates = [x.strip().lower().replace(" ", "-") for x in raw.split(",") if x.strip()]

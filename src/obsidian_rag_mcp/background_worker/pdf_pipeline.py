@@ -26,7 +26,6 @@ def process_pdf_to_markdown(
     source_pdf: Path,
     output_md: Path,
     image_dir: Path,
-    llm_runtime,
     llm_client: OpenAICompatibleClient,
     tag_catalog: TagCatalog,
 ) -> JobResult:

@@ -28,7 +28,7 @@ def test_update_markdown_note_flow(tmp_path: Path, monkeypatch) -> None:
 
     tools = MCPTools(cfg)
 
-    def fake_chat(prompt: str, images=None, generation_mode="openai", allow_local_fallback=True, require_success=False):
+    def fake_chat(prompt: str, images=None, require_success=False):
         if "Pick the best markdown file" in prompt:
             return '{"selected_path":"' + str(target).replace('\\', '\\\\') + '","confidence":0.95}'
         if "Summarize this markdown note" in prompt:

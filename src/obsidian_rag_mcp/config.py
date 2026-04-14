@@ -41,11 +41,10 @@ class ChunkingConfig(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    asr_model: str = "cohere-transcribe-03-2026"
-    generation_model: str = "gemma4-26B-A4B"
-    generation_quant: str = "Q3_K_M"
-    embedding_model: str = "Qwen3-Embedding-0.6B"
-    llm_service_url: str = "http://localhost:1234"
+    transcription_model: str = "gpt-4o-mini-transcribe"
+    generation_model: str = "gpt-5.4-mini"
+    embedding_model: str = "text-embedding-3-large"
+    api_base_url: str = "https://api.openai.com/v1"
 
 
 class AppConfig(BaseSettings):
@@ -56,7 +55,6 @@ class AppConfig(BaseSettings):
         extra="ignore",
     )
 
-    transcribe_local: bool = Field(default=False)
     vault_path: Path = Field(default_factory=lambda: default_runtime_paths()["vault_path"])
     audio_watch_path: Path = Field(default_factory=lambda: default_runtime_paths()["audio_watch_path"])
     pdf_watch_path: Path = Field(default_factory=lambda: default_runtime_paths()["pdf_watch_path"])

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from obsidian_rag_mcp.config import AppConfig
 from obsidian_rag_mcp.config import default_runtime_paths
 
 
@@ -14,3 +15,10 @@ def test_windows_default_runtime_paths_remain_home_relative() -> None:
     paths = default_runtime_paths(home=Path("C:/Users/Alice"), platform_name="nt")
     assert paths["vault_path"] == Path("C:/Users/Alice/Documents/obsidian-rag-vault")
     assert paths["image_watch_path"] == Path("C:/Users/Alice/.obragconfig/incoming/images")
+
+
+def test_default_model_config_is_api_only() -> None:
+    cfg = AppConfig()
+    assert cfg.models.api_base_url == "https://api.openai.com/v1"
+    assert cfg.models.transcription_model == "gpt-4o-mini-transcribe"
+    assert cfg.models.embedding_model == "text-embedding-3-large"

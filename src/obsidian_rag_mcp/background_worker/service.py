@@ -8,7 +8,6 @@ from pathlib import Path
 
 from obsidian_rag_mcp.background_worker.audio_pipeline import process_audio_to_markdown
 from obsidian_rag_mcp.background_worker.image_folder_pipeline import process_image_folder_to_markdown
-from obsidian_rag_mcp.background_worker.llm_runtime import ASRRuntimeManager, LLMRuntimeManager
 from obsidian_rag_mcp.background_worker.pdf_pipeline import process_pdf_to_markdown
 from obsidian_rag_mcp.background_worker.queue import DurableJobQueue
 from obsidian_rag_mcp.background_worker.watchers import scan_and_enqueue
@@ -28,12 +27,9 @@ class BackgroundWorker:
         self.config = config
         self.queue = DurableJobQueue(config.queue_path)
         self.vector_store = SQLiteVectorStore(config.db_path)
-        self.embeddings = EmbeddingService(config.models.llm_service_url, config.models.embedding_model)
-        self.llm_runtime = LLMRuntimeManager(config.models.llm_service_url, config.models.generation_model)
-        self.asr_runtime = ASRRuntimeManager(config.models.asr_model)
-        self.llm_client = OpenAICompatibleClient(config.models.llm_service_url, config.models.generation_model)
+        self.embeddings = EmbeddingService(config.models.api_base_url, config.models.embedding_model)
+        self.llm_client = OpenAICompatibleClient(config.models.api_base_url, config.models.generation_model)
         self.tag_catalog = TagCatalog(self.vector_store)
-        self.transcribe_local = self.config.transcribe_local
 
     def scan_once(self) -> dict[str, int]:
         return scan_and_enqueue(
@@ -46,20 +42,14 @@ class BackgroundWorker:
 
     def process_queue_once(self) -> dict[str, int]:
         jobs = self.queue.pop_all()
-        job_count = len(jobs)
-        iteration = 1
-
         metrics = {"processed": 0, "errors": 0, "indexed_chunks": 0}
         for job in jobs:
-            is_last_job = False
-            if iteration == job_count:
-                is_last_job = True
             source = Path(job.source_path)
             if self.vector_store.match_hash(job.source_path, job.idempotency_key):
                 continue
 
             prepared_source = self._prepare_source(job, source)
-            result = self._run_job_with_retry(job.job_type, prepared_source, self.config.vault_path, is_last_job)
+            result = self._run_job_with_retry(job.job_type, prepared_source, self.config.vault_path)
 
             if result.success and result.output_doc:
                 self.vector_store.upsert_doc_hash(job.source_path, job.idempotency_key)
@@ -76,7 +66,6 @@ class BackgroundWorker:
                 metrics["processed"] += 1
             else:
                 metrics["errors"] += 1
-            iteration += 1
         return metrics
 
     def run_forever(self, poll_seconds: float = 30) -> None:
@@ -86,7 +75,7 @@ class BackgroundWorker:
             LOG.info("scan=%s metrics=%s", queued, metrics)
             time.sleep(poll_seconds)
 
-    def _run_job_with_retry(self, job_type: str, source: Path, out_path: Path, retries: int = 2, is_last_job: bool = False):
+    def _run_job_with_retry(self, job_type: str, source: Path, out_path: Path, retries: int = 2):
         image_dir = Path(tempfile.gettempdir()) / "obrag_pdf_pages"
         last_result = None
         for attempt in range(retries + 1):
@@ -94,19 +83,15 @@ class BackgroundWorker:
                 last_result = process_audio_to_markdown(
                     source_audio=source,
                     output_md=out_path,
-                    asr_runtime=self.asr_runtime,
-                    llm_runtime=self.llm_runtime,
                     llm_client=self.llm_client,
                     tag_catalog=self.tag_catalog,
-                    is_last_job=is_last_job,
-                    transcribe_local=self.transcribe_local,
+                    transcription_model=self.config.models.transcription_model,
                 )
             elif job_type == "pdf":
                 last_result = process_pdf_to_markdown(
                     source_pdf=source,
                     output_md=out_path,
                     image_dir=image_dir,
-                    llm_runtime=self.llm_runtime,
                     llm_client=self.llm_client,
                     tag_catalog=self.tag_catalog,
                 )

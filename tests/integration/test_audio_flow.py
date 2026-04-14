@@ -25,22 +25,9 @@ def test_audio_ingestion_end_to_end(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("obsidian_rag_mcp.background_worker.watchers.is_stable_file", lambda *_args, **_kwargs: True)
     monkeypatch.setattr("obsidian_rag_mcp.background_worker.audio_pipeline.compress_for_asr_tempdir", lambda path: path)
 
-    class _FakeTranscriptions:
-        def create(self, model: str, file) -> str:
-            return "spoken transcript about learning systems"
-
-    class _FakeAudio:
-        def __init__(self) -> None:
-            self.transcriptions = _FakeTranscriptions()
-
-    class _FakeOpenAI:
-        def __init__(self) -> None:
-            self.audio = _FakeAudio()
-
-    monkeypatch.setattr("obsidian_rag_mcp.background_worker.audio_pipeline.OpenAI", _FakeOpenAI)
-
     (audio / "note.m4a").write_bytes(b"fake audio")
     worker = BackgroundWorker(cfg)
+    worker.llm_client.transcribe_audio = lambda *_args, **_kwargs: "spoken transcript about learning systems"
     worker.llm_client.chat = lambda *_args, **_kwargs: (
         '{"fileName":"note","relativePath":"inbox/imported","content":"# Summary\\n\\nspoken transcript about learning systems\\n\\ntags: learning,systems","tags":["learning","systems"]}'
     )

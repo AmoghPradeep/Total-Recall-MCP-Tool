@@ -26,7 +26,7 @@ Use MCP JSON-RPC over stdio instead.
 ```json
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
 {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
-{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"query_vault_context","arguments":{"query":"transformers","k":5}}}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"query_vault_context","arguments":{"query":"meeting notes","k":5}}}
 ```
 
 ## Error Contract

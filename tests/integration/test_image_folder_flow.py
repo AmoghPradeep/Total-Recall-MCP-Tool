@@ -31,7 +31,7 @@ def test_image_folder_ingestion_end_to_end(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("obsidian_rag_mcp.background_worker.watchers.is_stable_file", lambda *_args, **_kwargs: True)
     monkeypatch.setattr("obsidian_rag_mcp.background_worker.watchers.is_stable_directory", lambda *_args, **_kwargs: True)
 
-    def fake_chat(prompt: str, images=None, generation_mode="openai", allow_local_fallback=True, require_success=False):
+    def fake_chat(prompt: str, images=None, require_success=False):
         if "extracting content from a handwritten-notes PDF page image" in prompt:
             page_name = Path(images[0]).name if images else "page"
             return f"- extracted from {page_name}"

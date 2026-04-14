@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import random
 import time
-from typing import Iterable
 from openai import OpenAI
-
-import httpx
 
 
 class EmbeddingService:
@@ -28,11 +26,11 @@ class EmbeddingService:
         attempt = 0
         while True:
             try:
-                client = OpenAI()
+                client = self._client()
 
                 response = client.embeddings.create(
-                    input= batch,
-                    model=self.model
+                    input=batch,
+                    model=self.model,
                 )
 
                 embeddings: list[list[float]] = [
@@ -49,6 +47,12 @@ class EmbeddingService:
             sleep_for = self.backoff_seconds * (2**attempt) + random.uniform(0, 0.2)
             time.sleep(sleep_for)
             attempt += 1
+
+    def _client(self) -> OpenAI:
+        if not self.base_url or self.base_url == "https://api.openai.com/v1":
+            return OpenAI()
+        api_key = os.getenv("OPENAI_API_KEY", "remote-api-key")
+        return OpenAI(base_url=self.base_url, api_key=api_key)
 
     @staticmethod
     def _hash_embedding(text: str, dims: int = 64) -> list[float]:

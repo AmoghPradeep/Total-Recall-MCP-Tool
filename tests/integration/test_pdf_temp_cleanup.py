@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from obsidian_rag_mcp.background_worker.pdf_pipeline import process_pdf_to_markdown
-from obsidian_rag_mcp.background_worker.llm_runtime import LLMRuntimeManager
 from obsidian_rag_mcp.rag_core.llm_client import OpenAICompatibleClient
 from obsidian_rag_mcp.rag_core.tags import TagCatalog
 from obsidian_rag_mcp.rag_core.vector_store.sqlite_store import SQLiteVectorStore
@@ -18,15 +17,14 @@ def test_pdf_temp_images_cleaned(tmp_path: Path, monkeypatch) -> None:
 
     store = SQLiteVectorStore(tmp_path / "db.sqlite3")
     tag_catalog = TagCatalog(store)
-    client = OpenAICompatibleClient("http://localhost:1234", "gpt-5.4-mini")
-    runtime = LLMRuntimeManager("http://localhost:1234", "local")
+    client = OpenAICompatibleClient("https://api.openai.com/v1", "gpt-5.4-mini")
 
     monkeypatch.setattr(
         "obsidian_rag_mcp.background_worker.pdf_pipeline.convert_pdf_to_jpg_pages",
         lambda _pdf, image_dir: [image_dir / "page-1.jpg"],
     )
 
-    def fake_chat(prompt: str, images=None, generation_mode="openai", allow_local_fallback=True, require_success=False):
+    def fake_chat(prompt: str, images=None, require_success=False):
         if "Create a normalized Obsidian markdown note" in prompt:
             return '{"fileName":"doc","relativePath":"inbox/imported","content":"# Title\\n\\n## Source\\n[[z.rawdata/pdf/doc.pdf]]","tags":["notes"]}'
         if "Choose up to 5 domain tags" in prompt:
@@ -35,6 +33,6 @@ def test_pdf_temp_images_cleaned(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr(client, "chat", fake_chat)
 
-    result = process_pdf_to_markdown(raw_pdf, vault, image_base, runtime, client, tag_catalog)
+    result = process_pdf_to_markdown(raw_pdf, vault, image_base, client, tag_catalog)
     assert result.success is True
     assert not any(image_base.glob("pdf-pages-*"))

@@ -1,0 +1,17 @@
+# Runtime dependencies
+pydantic>=2.8
+pydantic-settings>=2.3
+httpx>=0.27
+numpy>=1.26
+watchdog>=4.0
+pypdfium2>=4.30
+PyYAML>=6.0
+mcp>=1.0
+openai
+transformers
+torch
+huggingface-hub
+pillow>=12.2.0
+
+# Test dependencies
+pytest>=8.2

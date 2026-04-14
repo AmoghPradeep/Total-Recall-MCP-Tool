@@ -17,6 +17,10 @@ dependencies = [
   "pypdfium2>=4.30",
   "PyYAML>=6.0",
   "mcp>=1.0",
+  "openai",
+  "transformers",
+  "torch",
+  "huggingface-hub",
   "pillow>=12.2.0",
 ]
 

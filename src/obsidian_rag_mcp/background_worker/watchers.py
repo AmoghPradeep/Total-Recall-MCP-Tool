@@ -64,17 +64,29 @@ def scan_and_enqueue(
     stability_seconds: float = 1.5,
 ) -> dict[str, int]:
     counts = {"audio": 0, "pdf": 0, "image_folder": 0}
+    LOG.debug(
+        "Starting watcher scan audio_dir=%s pdf_dir=%s image_dir=%s stability_seconds=%s",
+        audio_dir,
+        pdf_dir,
+        image_dir,
+        stability_seconds,
+    )
     for ext, folder, kind in (("*.m4a", audio_dir, "audio"), ("*.pdf", pdf_dir, "pdf")):
         if not folder.exists():
+            LOG.debug("Skipping missing watch directory job_type=%s path=%s", kind, folder)
             continue
         for file in folder.glob(ext):
             if not is_stable_file(file, wait_seconds=stability_seconds):
+                LOG.info("Deferring unstable file job_type=%s source=%s", kind, file)
                 continue
             job = IngestionJob(job_type=kind, source_path=str(file), idempotency_key=compute_idempotency_key(file))
             if queue.enqueue(job):
                 counts[kind] += 1
+            else:
+                LOG.debug("Skipping already enqueued file job_type=%s source=%s", kind, file)
 
     if not image_dir.exists():
+        LOG.debug("Skipping missing image watch directory path=%s", image_dir)
         return counts
     for folder in sorted((p for p in image_dir.iterdir() if p.is_dir()), key=lambda p: p.name.lower()):
         images = list_supported_image_files(folder)
@@ -91,6 +103,10 @@ def scan_and_enqueue(
         )
         if queue.enqueue(job):
             counts["image_folder"] += 1
+            LOG.info("Queued image folder source=%s page_count=%s", folder, len(images))
+        else:
+            LOG.debug("Skipping already enqueued image folder source=%s", folder)
+    LOG.info("Completed watcher scan counts=%s", counts)
     return counts
 
 

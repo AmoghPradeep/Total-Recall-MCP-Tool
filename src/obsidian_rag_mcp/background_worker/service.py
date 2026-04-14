@@ -30,42 +30,77 @@ class BackgroundWorker:
         self.embeddings = EmbeddingService(config.models.api_base_url, config.models.embedding_model)
         self.llm_client = OpenAICompatibleClient(config.models.api_base_url, config.models.generation_model)
         self.tag_catalog = TagCatalog(self.vector_store)
+        LOG.info(
+            "Initialized background worker vault_path=%s audio_watch_path=%s pdf_watch_path=%s image_watch_path=%s",
+            self.config.vault_path,
+            self.config.audio_watch_path,
+            self.config.pdf_watch_path,
+            self.config.image_watch_path,
+        )
 
     def scan_once(self) -> dict[str, int]:
-        return scan_and_enqueue(
+        LOG.debug("Scanning watch directories for new jobs")
+        counts = scan_and_enqueue(
             self.config.audio_watch_path,
             self.config.pdf_watch_path,
             self.config.image_watch_path,
             self.queue,
             stability_seconds=self.config.watcher_stability_seconds,
         )
+        LOG.info("Watcher scan complete counts=%s", counts)
+        return counts
 
     def process_queue_once(self) -> dict[str, int]:
         jobs = self.queue.pop_all()
+        LOG.info("Processing queued jobs count=%s", len(jobs))
         metrics = {"processed": 0, "errors": 0, "indexed_chunks": 0}
         for job in jobs:
             source = Path(job.source_path)
             if self.vector_store.match_hash(job.source_path, job.idempotency_key):
+                LOG.info("Skipping already indexed job job_type=%s source=%s", job.job_type, source)
                 continue
 
             prepared_source = self._prepare_source(job, source)
             result = self._run_job_with_retry(job.job_type, prepared_source, self.config.vault_path)
 
             if result.success and result.output_doc:
-                self.vector_store.upsert_doc_hash(job.source_path, job.idempotency_key)
-                text = result.output_doc.read_text(encoding="utf-8")
-                count = index_markdown_document(
-                    result.output_doc,
-                    text,
-                    self.embeddings,
-                    self.vector_store,
-                    chunk_size=self.config.chunking.chunk_size,
-                    chunk_overlap=self.config.chunking.chunk_overlap,
-                )
-                metrics["indexed_chunks"] += count
-                metrics["processed"] += 1
+                try:
+                    self.vector_store.upsert_doc_hash(job.source_path, job.idempotency_key)
+                    text = result.output_doc.read_text(encoding="utf-8")
+                    count = index_markdown_document(
+                        result.output_doc,
+                        text,
+                        self.embeddings,
+                        self.vector_store,
+                        chunk_size=self.config.chunking.chunk_size,
+                        chunk_overlap=self.config.chunking.chunk_overlap,
+                    )
+                    metrics["indexed_chunks"] += count
+                    metrics["processed"] += 1
+                    LOG.info(
+                        "Indexed processed job job_type=%s source=%s output_doc=%s indexed_chunks=%s",
+                        job.job_type,
+                        source,
+                        result.output_doc,
+                        count,
+                    )
+                except Exception:
+                    metrics["errors"] += 1
+                    LOG.exception(
+                        "Failed to index processed job job_type=%s source=%s output_doc=%s",
+                        job.job_type,
+                        source,
+                        result.output_doc,
+                    )
             else:
                 metrics["errors"] += 1
+                LOG.error(
+                    "Job completed with failure job_type=%s source=%s message=%s",
+                    job.job_type,
+                    source,
+                    result.message,
+                )
+        LOG.info("Finished processing queue metrics=%s", metrics)
         return metrics
 
     def run_forever(self, poll_seconds: float = 30) -> None:
@@ -79,6 +114,13 @@ class BackgroundWorker:
         image_dir = Path(tempfile.gettempdir()) / "obrag_pdf_pages"
         last_result = None
         for attempt in range(retries + 1):
+            LOG.info(
+                "Running job attempt job_type=%s source=%s attempt=%s max_attempts=%s",
+                job_type,
+                source,
+                attempt + 1,
+                retries + 1,
+            )
             if job_type == "audio":
                 last_result = process_audio_to_markdown(
                     source_audio=source,
@@ -103,10 +145,13 @@ class BackgroundWorker:
                     tag_catalog=self.tag_catalog,
                 )
             else:
+                LOG.error("Encountered unsupported job type job_type=%s source=%s", job_type, source)
                 raise ValueError(f"unsupported job type: {job_type}")
             if last_result.success:
+                LOG.info("Job attempt succeeded job_type=%s source=%s attempt=%s", job_type, source, attempt + 1)
                 return last_result
             LOG.warning("Job failed type=%s source=%s attempt=%s", job_type, source, attempt + 1)
+        LOG.error("Job exhausted retries job_type=%s source=%s retries=%s", job_type, source, retries + 1)
         return last_result
 
     def _prepare_source(self, job, source: Path) -> Path:
@@ -116,11 +161,14 @@ class BackgroundWorker:
         if job.job_type == "image_folder":
             destination = raw_root / f"{source.name}_{job.idempotency_key[:12]}"
             if destination.exists():
+                LOG.debug("Replacing existing prepared image folder destination=%s", destination)
                 shutil.rmtree(destination)
             shutil.copytree(source, destination)
+            LOG.info("Prepared image folder source=%s destination=%s", source, destination)
             return destination
 
         file_hash = hash_file(source)
         destination = raw_root / f"{source.stem}_{file_hash}{source.suffix}"
         shutil.copy(source, destination)
+        LOG.info("Prepared file source=%s destination=%s", source, destination)
         return destination

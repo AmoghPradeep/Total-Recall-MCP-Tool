@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from typing import Any
 
@@ -8,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from obsidian_rag_mcp.config import AppConfig
 from obsidian_rag_mcp.mcp_server.tools import MCPTools
+
+LOG = logging.getLogger(__name__)
 
 
 PROTOCOL_VERSION = "2025-03-26"
@@ -68,6 +71,7 @@ class MCPRuntime:
         request_id = message.get("id")
         try:
             method = str(message.get("method", "")).strip()
+            LOG.debug("Handling MCP message method=%s request_id=%s", method, request_id)
             params = message.get("params", {})
             if not isinstance(params, dict):
                 raise MCPRequestError(-32602, "Invalid params", {"reason": "params must be an object"})
@@ -86,6 +90,13 @@ class MCPRuntime:
                 return None
             return {"jsonrpc": "2.0", "id": request_id, "result": result}
         except MCPRequestError as exc:
+            LOG.warning(
+                "MCP request failed method=%s request_id=%s code=%s message=%s",
+                message.get("method"),
+                request_id,
+                exc.code,
+                exc.message,
+            )
             if request_id is None:
                 return None
             return {
@@ -94,6 +105,7 @@ class MCPRuntime:
                 "error": {"code": exc.code, "message": exc.message, "data": exc.data},
             }
         except Exception as exc:  # pragma: no cover - terminal safety net
+            LOG.exception("Unhandled MCP runtime error method=%s request_id=%s", message.get("method"), request_id)
             if request_id is None:
                 return None
             return {
@@ -118,6 +130,7 @@ class MCPRuntime:
         arguments = params.get("arguments", {})
         if not isinstance(arguments, dict):
             raise MCPRequestError(-32602, "Invalid params", {"reason": "arguments must be an object"})
+        LOG.info("Handling MCP tool call tool=%s", name)
 
         if name == "query_vault_context":
             parsed = self._validate_tool_arguments(name, QueryVaultContextInput, arguments)
@@ -129,6 +142,7 @@ class MCPRuntime:
                     "Tool execution failed",
                     {"tool": name, "type": exc.__class__.__name__},
                 ) from exc
+            LOG.info("Completed MCP tool call tool=%s", name)
             return _tool_success(payload)
         if name == "update_markdown_note":
             parsed = self._validate_tool_arguments(name, UpdateMarkdownNoteInput, arguments)
@@ -144,6 +158,7 @@ class MCPRuntime:
                     "Tool execution failed",
                     {"tool": name, "type": exc.__class__.__name__},
                 ) from exc
+            LOG.info("Completed MCP tool call tool=%s", name)
             return _tool_success(payload)
         raise MCPRequestError(-32601, "Tool not found", {"tool": name})
 
@@ -183,6 +198,7 @@ def _tool_success(payload: dict[str, Any]) -> dict[str, Any]:
 
 def run_stdio_server(config: AppConfig) -> None:
     runtime = MCPRuntime(MCPTools(config))
+    LOG.info("Starting MCP stdio server")
     for raw_line in sys.stdin:
         line = raw_line.strip()
         if not line:
@@ -190,6 +206,7 @@ def run_stdio_server(config: AppConfig) -> None:
         try:
             request = json.loads(line)
         except json.JSONDecodeError:
+            LOG.warning("Received invalid JSON request on MCP stdio")
             response = {
                 "jsonrpc": "2.0",
                 "id": None,
@@ -198,6 +215,7 @@ def run_stdio_server(config: AppConfig) -> None:
             print(json.dumps(response, ensure_ascii=False), flush=True)
             continue
         if not isinstance(request, dict):
+            LOG.warning("Received non-object MCP request payload type=%s", type(request).__name__)
             response = {
                 "jsonrpc": "2.0",
                 "id": None,

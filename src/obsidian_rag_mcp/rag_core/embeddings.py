@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import random
 import time
 from openai import OpenAI
+
+LOG = logging.getLogger(__name__)
 
 
 class EmbeddingService:
@@ -16,6 +19,7 @@ class EmbeddingService:
         self.batch_size = batch_size
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        LOG.debug("Embedding text batch total_texts=%s batch_size=%s model=%s", len(texts), self.batch_size, self.model)
         vectors: list[list[float]] = []
         for i in range(0, len(texts), self.batch_size):
             batch = texts[i : i + self.batch_size]
@@ -26,6 +30,7 @@ class EmbeddingService:
         attempt = 0
         while True:
             try:
+                LOG.debug("Submitting embedding batch model=%s batch_size=%s attempt=%s", self.model, len(batch), attempt + 1)
                 client = self._client()
 
                 response = client.embeddings.create(
@@ -37,13 +42,26 @@ class EmbeddingService:
                     item.embedding
                     for item in sorted(response.data, key=lambda x: x.index)
                 ]
+                LOG.info("Embedding batch completed model=%s batch_size=%s", self.model, len(batch))
                 return embeddings
 
-            except Exception:
-                pass
-
-            if attempt >= self.retries:
-                return [self._hash_embedding(text) for text in batch]
+            except Exception as exc:
+                if attempt >= self.retries:
+                    LOG.error(
+                        "Embedding batch failed after retries model=%s batch_size=%s attempts=%s error=%s",
+                        self.model,
+                        len(batch),
+                        attempt + 1,
+                        exc,
+                    )
+                    return [self._hash_embedding(text) for text in batch]
+                LOG.warning(
+                    "Embedding batch failed, retrying model=%s batch_size=%s attempt=%s error=%s",
+                    self.model,
+                    len(batch),
+                    attempt + 1,
+                    exc,
+                )
             sleep_for = self.backoff_seconds * (2**attempt) + random.uniform(0, 0.2)
             time.sleep(sleep_for)
             attempt += 1

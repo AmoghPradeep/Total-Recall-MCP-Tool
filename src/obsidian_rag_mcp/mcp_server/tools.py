@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shutil
 from dataclasses import asdict
@@ -16,6 +17,8 @@ from obsidian_rag_mcp.rag_core.llm_client import OpenAICompatibleClient
 from obsidian_rag_mcp.rag_core.manifest import VaultManifest, compute_vault_fingerprints
 from obsidian_rag_mcp.rag_core.retrieval import RetrievalService
 from obsidian_rag_mcp.rag_core.vector_store.sqlite_store import SQLiteVectorStore
+
+LOG = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -36,6 +39,7 @@ class MCPTools:
         self.llm_client = OpenAICompatibleClient(config.models.api_base_url, config.models.generation_model)
 
     def reindex_vault_delta(self) -> dict:
+        LOG.info("Starting vault delta reindex vault_path=%s", self.config.vault_path)
         previous = self.manifest.load()
         current = compute_vault_fingerprints(self.config.vault_path)
 
@@ -50,6 +54,7 @@ class MCPTools:
         for path in sorted(deleted):
             self.store.delete_by_doc(path)
             metrics.deleted += 1
+            LOG.info("Removed deleted document from index path=%s", path)
 
         for path in sorted(new_or_changed):
             try:
@@ -65,18 +70,23 @@ class MCPTools:
                 )
                 if count > 0:
                     metrics.processed += 1
+                    LOG.info("Reindexed markdown document path=%s chunk_count=%s", md_path, count)
                 else:
                     metrics.skipped += 1
+                    LOG.info("Skipped empty markdown document during reindex path=%s", md_path)
             except Exception:
                 metrics.errors += 1
+                LOG.exception("Failed to reindex markdown document path=%s", path)
 
         for path in sorted(curr_paths - new_or_changed):
             metrics.skipped += 1
 
         self.manifest.save(current)
+        LOG.info("Completed vault delta reindex metrics=%s", asdict(metrics))
         return asdict(metrics)
 
     def query_vault_context(self, query: str, k: int = 5) -> dict:
+        LOG.info("Querying vault context query_length=%s requested_k=%s", len(query.strip()), k)
         results = self.retrieval.query(query, k)
         normalized = []
         for row in results:
@@ -90,11 +100,19 @@ class MCPTools:
                     "similarity_score": float(row["score"]),
                 }
             )
+        LOG.info("Completed vault context query returned_k=%s", len(normalized))
         return {"k": len(normalized), "results": normalized}
 
     def update_markdown_note(self, note_reference: str, update_context: str = "", confidence_threshold: float = 0.65) -> dict:
+        LOG.info(
+            "Updating markdown note note_reference=%s confidence_threshold=%s update_context_length=%s",
+            note_reference,
+            confidence_threshold,
+            len(update_context),
+        )
         candidates = self._fuzzy_candidates(note_reference)
         if not candidates:
+            LOG.warning("No markdown note candidates found note_reference=%s", note_reference)
             return {
                 "status": "not_found",
                 "note_reference": note_reference,
@@ -109,6 +127,13 @@ class MCPTools:
         target_path = Path(resolution.get("selected_path", ""))
 
         if confidence < confidence_threshold or not target_path.exists():
+            LOG.warning(
+                "Markdown note resolution ambiguous note_reference=%s confidence=%s threshold=%s candidate_count=%s",
+                note_reference,
+                confidence,
+                confidence_threshold,
+                len(candidates),
+            )
             return {
                 "status": "ambiguous",
                 "note_reference": note_reference,
@@ -132,6 +157,7 @@ class MCPTools:
 
         if str(new_path) != str(old_path):
             self.store.delete_by_doc(str(old_path))
+            LOG.info("Moved markdown note old_path=%s new_path=%s", old_path, new_path)
 
         indexed_chunks = index_markdown_document(
             new_path,
@@ -140,6 +166,12 @@ class MCPTools:
             self.store,
             chunk_size=self.config.chunking.chunk_size,
             chunk_overlap=self.config.chunking.chunk_overlap,
+        )
+        LOG.info(
+            "Completed markdown note update note_reference=%s resolved_file=%s indexed_chunks=%s",
+            note_reference,
+            new_path,
+            indexed_chunks,
         )
 
         return {
@@ -175,10 +207,13 @@ class MCPTools:
             scored.append({"path": str(file), "score": round(score, 4)})
 
         scored.sort(key=lambda x: x["score"], reverse=True)
-        return [row for row in scored[:limit] if row["score"] > 0.15]
+        candidates = [row for row in scored[:limit] if row["score"] > 0.15]
+        LOG.debug("Resolved markdown candidates note_reference=%s candidate_count=%s", note_reference, len(candidates))
+        return candidates
 
     def _resolve_candidate_with_llm(self, note_reference: str, candidates: list[dict], update_context: str) -> dict:
         if len(candidates) == 1:
+            LOG.info("Single markdown candidate matched note_reference=%s path=%s", note_reference, candidates[0]["path"])
             return {"selected_path": candidates[0]["path"], "confidence": candidates[0]["score"]}
 
         listed = "\n".join(f"- {c['path']} (score={c['score']})" for c in candidates)
@@ -192,18 +227,21 @@ Update context: {update_context}
 Candidates:
 {listed}
 """
+        LOG.debug("Resolving markdown candidate with LLM note_reference=%s candidate_count=%s", note_reference, len(candidates))
         raw = self.llm_client.chat(prompt, require_success=False)
         try:
             parsed = json.loads(_strip_fence(raw))
             selected = str(parsed.get("selected_path", "")).strip()
             confidence = float(parsed.get("confidence", 0.0))
             if selected:
+                LOG.info("LLM resolved markdown candidate note_reference=%s selected_path=%s confidence=%s", note_reference, selected, confidence)
                 return {"selected_path": selected, "confidence": confidence}
         except Exception:
-            pass
+            LOG.exception("Failed to parse LLM note resolution response note_reference=%s", note_reference)
 
         # deterministic lexical fallback
         top = candidates[0]
+        LOG.warning("Falling back to top lexical candidate note_reference=%s path=%s", note_reference, top["path"])
         return {"selected_path": top["path"], "confidence": min(float(top["score"]), 0.64)}
 
     def _generate_summary(self, content: str, update_context: str) -> str:

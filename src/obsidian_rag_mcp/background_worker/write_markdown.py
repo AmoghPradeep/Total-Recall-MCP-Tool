@@ -96,6 +96,8 @@ def process_json_response(json_parameters: str, obsidian_vault_path: Path) -> tu
         Path: Full path of the created markdown file
     """
 
+    LOG.debug("Processing markdown JSON response vault_path=%s", obsidian_vault_path)
+
     # Clean possible markdown fences
     cleaned = json_parameters.strip()
     if cleaned.startswith("```"):
@@ -106,6 +108,7 @@ def process_json_response(json_parameters: str, obsidian_vault_path: Path) -> tu
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError as e:
+        LOG.error("Failed to decode markdown JSON response vault_path=%s", obsidian_vault_path)
         raise ValueError(f"Invalid JSON input: {e}")
 
     # Extract fields
@@ -116,11 +119,13 @@ def process_json_response(json_parameters: str, obsidian_vault_path: Path) -> tu
     tags = data.get("tags", [])
 
     if not isinstance(tags, list):
+        LOG.error("Invalid tags payload type=%s vault_path=%s", type(tags).__name__, obsidian_vault_path)
         raise ValueError("Tags must be a list")
 
     tags = [str(tag).strip() for tag in tags if str(tag).strip()]
 
     if not content:
+        LOG.error("Refusing to create markdown file with empty content vault_path=%s file_name=%s", obsidian_vault_path, file_name)
         raise ValueError("Content is empty. Cannot create markdown file.")
 
     # Create file path
@@ -129,10 +134,12 @@ def process_json_response(json_parameters: str, obsidian_vault_path: Path) -> tu
     # Avoid overwriting existing files
     counter = 1
     while file_path.exists():
+        LOG.debug("Markdown target already exists, incrementing suffix path=%s", file_path)
         file_path = output_dir / f"{file_name} {counter}.md"
         counter += 1
 
     # Write file
     file_path.write_text(content, encoding="utf-8")
+    LOG.info("Wrote markdown note path=%s tag_count=%s", file_path, len(tags))
 
     return file_path, tags

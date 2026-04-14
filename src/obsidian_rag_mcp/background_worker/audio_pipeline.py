@@ -21,19 +21,23 @@ def process_audio_to_markdown(
     transcription_model: str,
 ) -> JobResult:
     try:
+        LOG.info("Starting audio pipeline source=%s transcription_model=%s", source_audio, transcription_model)
         vault_root = output_md if output_md.is_dir() else output_md.parent
         source_audio = compress_for_asr_tempdir(source_audio)
+        LOG.debug("Prepared audio source path=%s", source_audio)
         transcript = llm_client.transcribe_audio(source_audio, transcription_model)
-        LOG.info("transcription: %s", transcript)
+        LOG.info("Completed audio transcription source=%s transcript_chars=%s", source_audio, len(transcript))
 
         tags = tag_catalog.store.get_tags()
         dir_structure = ",".join(str(p.relative_to(vault_root)) for p in vault_root.rglob("*") if p.is_dir())
+        LOG.debug("Normalizing audio markdown source=%s known_tag_count=%s", source_audio, len(tags))
         prompt = get_normalize_to_markdown(", ".join(tags), transcript, dir_structure, source_audio)
         json_response = llm_client.chat(prompt)
 
         output_md, tags = process_json_response(json_response, vault_root)
         tag_catalog.persist_doc_tags(str(output_md), tags)
+        LOG.info("Completed audio pipeline source=%s output_doc=%s tag_count=%s", source_audio, output_md, len(tags))
         return JobResult(source_path=source_audio, success=True, message="audio processed", output_doc=output_md)
     except Exception as exc:
-        LOG.exception("audio pipeline failed")
+        LOG.exception("Audio pipeline failed source=%s", source_audio)
         return JobResult(source_path=source_audio, success=False, message=str(exc))

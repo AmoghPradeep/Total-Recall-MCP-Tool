@@ -23,29 +23,45 @@ class OpenAICompatibleClient:
         require_success: bool = False,
     ) -> str:
         try:
+            LOG.debug(
+                "Submitting generation request model=%s image_count=%s base_url=%s require_success=%s",
+                self.model,
+                len(images or []),
+                self.base_url or OPENAI_API_BASE_URL,
+                require_success,
+            )
             client = self._client()
             response = client.responses.create(
                 model=self.model,
                 input=self._build_input(prompt, images),
             )
+            LOG.info("Generation request completed model=%s image_count=%s", self.model, len(images or []))
             return response.output_text
         except Exception as exc:
-            LOG.warning("Generation failed: %s", exc)
+            LOG.error(
+                "Generation request failed model=%s image_count=%s require_success=%s error=%s",
+                self.model,
+                len(images or []),
+                require_success,
+                exc,
+            )
             if require_success:
                 raise RuntimeError(f"Generation failed: {exc}") from exc
             return prompt[:2000]
 
     def transcribe_audio(self, audio_path: Path, model: str) -> str:
         try:
+            LOG.debug("Submitting transcription request model=%s source=%s", model, audio_path)
             with audio_path.open("rb") as audio_file:
                 client = self._client()
                 response = client.audio.transcriptions.create(
                     model=model,
                     file=audio_file,
                 )
+            LOG.info("Transcription request completed model=%s source=%s", model, audio_path)
             return str(response)
         except Exception as exc:
-            LOG.warning("Transcription failed: %s", exc)
+            LOG.error("Transcription request failed model=%s source=%s error=%s", model, audio_path, exc)
             raise RuntimeError(f"Transcription failed: {exc}") from exc
 
     def _client(self) -> OpenAI:

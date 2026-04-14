@@ -54,7 +54,9 @@ def process_audio_to_markdown(
 
         tags = tag_catalog.store.get_tags()
 
-        prompt = get_normalize_to_markdown(", ".join(tags), transcript, ",".join(str(p) for p in vault_root.rglob("*") if p.is_dir()), source_audio)
+        dir_structure = ",".join(str(p.relative_to(vault_root)) for p in vault_root.rglob("*") if p.is_dir())
+
+        prompt = get_normalize_to_markdown(", ".join(tags), transcript, dir_structure, source_audio)
 
         json_response = llm_client.chat(prompt, generation_mode = generation_mode)
 

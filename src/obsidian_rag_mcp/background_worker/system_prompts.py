@@ -19,21 +19,20 @@ Output STRICTLY in valid JSON with the following structure:
 
 Where:
 - "fileName" is a concise, descriptive title derived from the content (no special characters except hyphens or spaces)
-- "relativePath" refers to a vault-relative DIRECTORY only. Use existing directories where possible.
+- "relativePath" refers to a vault-relative DIRECTORY only. Use existing directories as much as possible, else create a new appropriately named directory. Directory names should start super broad, and grow in specificity with depth.  
   IMPORTANT path constraints for "relativePath":
   - MUST be relative (never absolute)
   - MUST NOT start with drive letters like `C:\\` or malformed forms like `C--Users`
   - MUST NOT start with `/`, `\\`, or `//`
   - MUST NOT contain `..` or `.` traversal segments
   - MUST NOT include the file name
-  - If unsure, use: `inbox/imported`
 - "content" is the full Markdown note
 - "tags" are the same tags mentioned inside the file contents.
 
 Directory Structure:
 {{ {dir_structure} }}
-The Markdown inside "content" must follow this structure:
 
+The Markdown inside "content" must follow this structure:
 # Title
 
 ## 1. Transcript
@@ -59,6 +58,10 @@ Be concise and structured.
 - Keep tags broad (e.g., #learning, #psychology, #business)
 - Avoid niche or overly specific tags
 
+## 4. Resources
+- backlink to original raw file. This should be in obsidian format - as a link to the raw file. 
+raw file location : {raw_file_path}
+
 Constraints:
 - No hallucinations
 - No EM-Dashes in output
@@ -67,10 +70,7 @@ Constraints:
 - Output ONLY valid JSON
 - Do NOT include explanations, markdown fences, or extra text outside JSON
 
-## Resource
-- backlink to original raw file
 
-{raw_file_path}
 # USER
 data :
 {raw_content}
@@ -138,7 +138,30 @@ Existing tags:
 def get_pdf_note_json_prompt(tags, extracted_content, summary, dir_structure, raw_pdf_backlink):
     return f'''
 # SYSTEM
-Create a normalized Obsidian markdown note for PDF-derived content.
+You are given the raw OCR transcript of a handwritten note extracted from a PDF.
+
+Your task is to turn that noisy transcript into a clean, polished, well-structured knowledge note.
+
+Important context:
+- The source was handwritten, so the OCR may contain spelling mistakes, broken sentences, missing punctuation, duplicated fragments, incorrect word boundaries, and misread words.
+- The original writing may be incomplete, loosely structured, or ambiguous.
+- Treat the input as rough personal thinking that needs light reconstruction, not as a formal document.
+
+Your goals:
+1. Infer the most likely topic and intended meaning from the transcript.
+2. Correct obvious OCR and spelling errors where the intended meaning is reasonably clear.
+3. Reorganize the content into a coherent, readable note with clear structure.
+4. Preserve the original ideas, intent, and level of detail as much as possible.
+5. Add only the minimum connective language needed to make the note understandable and fluent.
+
+Rules:
+- Do not invent facts, examples, citations, or explanations that are not supported by the transcript.
+- Do not significantly expand the content.
+- Do not over-formalize the writing; keep it faithful to the original note-taking style, but cleaner and clearer.
+- If a passage is too ambiguous to confidently resolve, preserve it in the most plausible form rather than hallucinating.
+- Remove obvious OCR garbage, repeated fragments, and meaningless artifacts.
+- Normalize formatting, grammar, and punctuation.
+
 Output STRICTLY valid JSON:
 
 {{
@@ -148,21 +171,48 @@ Output STRICTLY valid JSON:
   "tags": ["tag1", "tag2"]
 }}
 
-Path constraints for "relativePath":
-- MUST be vault-relative only.
-- MUST NOT be absolute, UNC, rooted, or include traversal segments.
-- MUST NOT contain file name.
-- If unsure: use `inbox/imported`.
+Where:
+- "fileName" is a concise, descriptive title derived from the content (no special characters except hyphens or spaces)
+- "relativePath" refers to a vault-relative DIRECTORY only. Use existing directories as much as possible, else create a new appropriately named directory. Directory names should start super broad, and grow in specificity with depth.  
+  IMPORTANT path constraints for "relativePath":
+  - MUST be relative (never absolute)
+  - MUST NOT start with drive letters like `C:\\` or malformed forms like `C--Users`
+  - MUST NOT start with `/`, `\\`, or `//`
+  - MUST NOT contain `..` or `.` traversal segments
+  - MUST NOT include the file name
+- "content" is the full Markdown note
+- "tags" are the same tags mentioned inside the file contents.
 
-Markdown requirements for "content":
-- Include sections:
-  1) # Title
-  2) ## Extracted Notes
-  3) ## Summary
-  4) ## Source
-- In Source section, include this exact backlink: {raw_pdf_backlink}
-- Preserve fidelity to extracted content.
-- No hallucinations.
+The Markdown inside "content" must follow this structure:
+# Title
+
+## 1. Transcript
+Transform the transcription into clear, structured writing:
+- Preserve all ideas and nuances
+- Remove verbal noise and repetition
+- Rewrite in a calm, precise, and intellectual tone
+- Make it feel like a well-maintained notebook entry
+- Use paragraphs and light structure where helpful
+- Do not summarize
+
+## 2. Summary & Takeaways
+Distill the note into:
+- Core ideas
+- Important insights
+- Practical implications or actions
+
+Be concise and structured.
+
+## 3. Tags
+- Prefer existing tags from input
+- Add only if necessary
+- Keep tags broad (e.g., #learning, #psychology, #business)
+- Avoid niche or overly specific tags
+
+## 4. Resources
+- backlink to original raw file. This should be in obsidian format - as a link to the raw file. 
+raw file location : {raw_pdf_backlink}
+
 
 Directory Structure:
 {{ {dir_structure} }}

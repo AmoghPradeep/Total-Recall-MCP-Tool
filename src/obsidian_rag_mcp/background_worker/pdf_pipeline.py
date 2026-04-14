@@ -5,6 +5,7 @@ import shutil
 import tempfile
 from pathlib import Path
 from uuid import uuid4
+from PIL import Image
 
 try:
     import pypdfium2 as pdfium
@@ -67,14 +68,19 @@ def process_pdf_to_markdown(
         full_content = "\n".join(page_summaries)
         tags = _choose_tags(full_content + "\n" + reduced_summary, llm_client, tag_catalog)
 
-        backlink = _build_raw_pdf_backlink(vault_root, source_pdf)
-        dir_structure = ",".join(str(p.relative_to(vault_root)) for p in vault_root.rglob("*") if p.is_dir())
+
+        dir_structure = ",".join(
+            str(p.relative_to(vault_root))
+            for p in vault_root.rglob("*")
+            if p.is_dir() and "z.rawdata" not in str(p)
+        )
+
         prompt = get_pdf_note_json_prompt(
             ", ".join(tags),
             full_content,
             reduced_summary,
             dir_structure,
-            backlink,
+            source_pdf,
         )
 
         json_response = llm_client.chat(
@@ -85,7 +91,7 @@ def process_pdf_to_markdown(
         )
 
         note_path, parsed_tags = process_json_response(json_response, vault_root)
-        _ensure_backlink(note_path, backlink)
+        _ensure_backlink(note_path, source_pdf)
         final_tags = parsed_tags if parsed_tags else tags
         tag_catalog.persist_doc_tags(str(note_path), final_tags)
 
@@ -124,7 +130,7 @@ def _resize_preserving_long_edge(image, max_long_edge: int):
         return image
     scale = max_long_edge / float(long_edge)
     new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
-    return image.resize(new_size)
+    return image.resize(new_size, resample=Image.LANCZOS)
 
 
 def _choose_tags(content: str, llm_client: OpenAICompatibleClient, tag_catalog: TagCatalog) -> list[str]:

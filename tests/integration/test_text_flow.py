@@ -30,9 +30,9 @@ def test_text_ingestion_end_to_end_for_txt_and_md(tmp_path: Path, monkeypatch) -
 
     def fake_chat(prompt: str, images=None, require_success=False):
         if "raw text file" in prompt and "rough notes about learning systems" in prompt:
-            return '{"fileName":"ideas note","relativePath":"inbox/imported","content":"# Ideas Note\\n\\n## 1. Transcript\\nrough notes about learning systems\\n\\n## 2. Summary & Takeaways\\n- learning systems\\n\\n## 3. Tags\\n- learning\\n\\n## 4. Resources\\n- [[z.rawdata/text/ideas_fakehash-ideas.txt]]","tags":["learning"]}'
+            return '{"fileName":"Learning Systems","relativePath":"Topics/Learning","content":"# Learning Systems\\n\\n## 1. Transcript\\nrough notes about learning systems\\n\\n## 2. Summary & Takeaways\\n- learning systems\\n\\n## 3. Tags\\n- learning\\n\\n## 4. Resources\\n- [[z.rawdata/text/ideas_fakehash-ideas.txt]]","tags":["learning"]}'
         if "raw text file" in prompt and "# Existing Note" in prompt:
-            return '{"fileName":"source note","relativePath":"inbox/imported","content":"# Source Note\\n\\n## 1. Transcript\\nThoughts about retrieval\\n\\n## 2. Summary & Takeaways\\n- retrieval\\n\\n## 3. Tags\\n- retrieval\\n\\n## 4. Resources\\n- [[z.rawdata/text/source_fakehash-source.md]]","tags":["retrieval"]}'
+            return '{"fileName":"Retrieval Notes","relativePath":"Topics/Research","content":"# Retrieval Notes\\n\\n## 1. Transcript\\nThoughts about retrieval\\n\\n## 2. Summary & Takeaways\\n- retrieval\\n\\n## 3. Tags\\n- retrieval\\n\\n## Sources\\n[[z.rawdata/text/source_fakehash-source.md]]","tags":["retrieval"]}'
         return ""
 
     worker = BackgroundWorker(cfg)
@@ -50,9 +50,15 @@ def test_text_ingestion_end_to_end_for_txt_and_md(tmp_path: Path, monkeypatch) -
     assert txt_raw.exists()
     assert md_raw.exists()
 
-    txt_note = vault / "inbox" / "imported" / "ideas note.md"
-    md_note = vault / "inbox" / "imported" / "source note.md"
+    txt_note = vault / "Topics" / "Learning" / "Learning Systems.md"
+    md_note = vault / "Topics" / "Research" / "Retrieval Notes.md"
     assert txt_note.exists()
     assert md_note.exists()
-    assert "[[z.rawdata/text/ideas_fakehash-ideas.txt]]" in txt_note.read_text(encoding="utf-8")
-    assert "[[z.rawdata/text/source_fakehash-source.md]]" in md_note.read_text(encoding="utf-8")
+    txt_content = txt_note.read_text(encoding="utf-8")
+    md_content = md_note.read_text(encoding="utf-8")
+    assert "# Learning Systems" not in txt_content
+    assert "## 4. Resources" not in txt_content
+    assert txt_content.count("## Sources") == 1
+    assert "[[z.rawdata/text/ideas_fakehash-ideas.txt|Original Text]]" in txt_content
+    assert md_content.count("## Sources") == 1
+    assert "[[z.rawdata/text/source_fakehash-source.md|Original Text]]" in md_content

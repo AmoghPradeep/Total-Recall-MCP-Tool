@@ -26,7 +26,7 @@ def test_pdf_temp_images_cleaned(tmp_path: Path, monkeypatch) -> None:
 
     def fake_chat(prompt: str, images=None, require_success=False):
         if "Create a normalized Obsidian markdown note" in prompt:
-            return '{"fileName":"doc","relativePath":"inbox/imported","content":"# Title\\n\\n## Source\\n[[z.rawdata/pdf/doc.pdf]]","tags":["notes"]}'
+            return '{"fileName":"Doc Scan","relativePath":"References/Scans","content":"# Title\\n\\n## Source\\n[[z.rawdata/pdf/doc.pdf]]","tags":["notes"]}'
         if "Choose up to 5 domain tags" in prompt:
             return "notes"
         return "ok"

@@ -11,7 +11,8 @@ try:
 except Exception:  # pragma: no cover
     pdfium = None
 
-from total_recall.background_worker.page_document_pipeline import build_vault_backlink, process_page_images_to_markdown
+from total_recall.background_worker.output_policy import build_aliased_vault_link
+from total_recall.background_worker.page_document_pipeline import process_page_images_to_markdown
 from total_recall.models import JobResult
 from total_recall.rag_core.llm_client import OpenAICompatibleClient
 from total_recall.rag_core.tags import TagCatalog
@@ -42,7 +43,7 @@ def process_pdf_to_markdown(
             output_md=output_md,
             llm_client=llm_client,
             tag_catalog=tag_catalog,
-            source_backlinks=[build_vault_backlink(vault_root, source_pdf)],
+            source_links=[build_aliased_vault_link(vault_root, source_pdf, "Original PDF")],
         )
         LOG.info("Completed PDF pipeline source=%s success=%s output_doc=%s", source_pdf, result.success, result.output_doc)
         return result

@@ -45,6 +45,18 @@ The app derives its watched source folders from `TOTAL_RECALL_INCOMING_ROOT`:
 Each immediate child directory under `TOTAL_RECALL_INCOMING_ROOT/image` is treated as one multi-image document. For example, `.../image/note-1/image-1-of-3.png` and `image-2-of-3.png` are combined into one markdown note.
 Files placed under `TOTAL_RECALL_INCOMING_ROOT/text` are ingested as text sources when they have `.txt` or `.md` extensions.
 
+Generated notes are written under a bounded knowledge taxonomy rooted at:
+
+- `People`
+- `Projects`
+- `Areas`
+- `Topics`
+- `References`
+
+The worker may fall back to `inbox/imported` when a model proposes an invalid, reserved, or overly deep destination. Raw imported assets remain under `z.rawdata` only and are never a valid destination for generated markdown notes.
+
+Generated note bodies do not include a top-level H1 title. Obsidian uses the file name as the note title, and the worker appends one canonical `## Sources` section with aliased wikilinks such as `[[z.rawdata/pdf/doc.pdf|Original PDF]]`.
+
 ## Start background worker
 
 ```powershell

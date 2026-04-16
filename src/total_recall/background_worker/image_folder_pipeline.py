@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from total_recall.background_worker.page_document_pipeline import build_vault_backlink, process_page_images_to_markdown
+from total_recall.background_worker.output_policy import build_aliased_vault_link
+from total_recall.background_worker.page_document_pipeline import process_page_images_to_markdown
 from total_recall.background_worker.watchers import list_supported_image_files
 from total_recall.models import JobResult
 from total_recall.rag_core.llm_client import OpenAICompatibleClient
@@ -27,14 +28,17 @@ def process_image_folder_to_markdown(
             return JobResult(source_path=source_dir, success=False, message="no supported images in folder", output_doc=None)
 
         LOG.info("Prepared image folder pipeline source=%s page_count=%s", source_dir, len(page_images))
-        backlinks = [build_vault_backlink(vault_root, image) for image in page_images]
+        source_links = [
+            build_aliased_vault_link(vault_root, image, f"Page {idx}")
+            for idx, image in enumerate(page_images, start=1)
+        ]
         result = process_page_images_to_markdown(
             source_path=source_dir,
             page_images=page_images,
             output_md=output_md,
             llm_client=llm_client,
             tag_catalog=tag_catalog,
-            source_backlinks=backlinks,
+            source_links=source_links,
         )
         LOG.info("Completed image folder pipeline source=%s success=%s output_doc=%s", source_dir, result.success, result.output_doc)
         return result

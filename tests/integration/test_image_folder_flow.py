@@ -40,7 +40,7 @@ def test_image_folder_ingestion_end_to_end(tmp_path: Path, monkeypatch) -> None:
         if "Choose up to 5 domain tags" in prompt:
             return "notes,apple-notes"
         if "Create a normalized Obsidian markdown note" in prompt:
-            return '{"fileName":"apple-export","relativePath":"inbox/imported","content":"# Apple Export\\n\\n## 1. Transcript\\nCombined\\n\\n## 2. Summary & Takeaways\\nCombined summary\\n\\n## 3. Tags\\n- notes\\n- apple-notes","tags":["notes","apple-notes"]}'
+            return '{"fileName":"Apple Export","relativePath":"References/Imports","content":"# Apple Export\\n\\n## 1. Transcript\\nCombined\\n\\n## 2. Summary & Takeaways\\nCombined summary\\n\\n## 3. Tags\\n- notes\\n- apple-notes","tags":["notes","apple-notes"]}'
         return ""
 
     worker = BackgroundWorker(cfg)
@@ -53,15 +53,16 @@ def test_image_folder_ingestion_end_to_end(tmp_path: Path, monkeypatch) -> None:
     assert metrics["processed"] == 1
     assert metrics["indexed_chunks"] >= 1
 
-    md = vault / "inbox" / "imported" / "apple-export.md"
+    md = vault / "References" / "Imports" / "Apple Export.md"
     assert md.exists()
     text = md.read_text(encoding="utf-8")
+    assert text.count("## Sources") == 1
     assert "[[z.rawdata/image_folder/note-1_" in text
-    assert "image-1-of-3.png" in text
-    assert "image-2-of-3.png" in text
-    assert "image-3-of-3.png" in text
+    assert "|Page 1]]" in text
+    assert "|Page 2]]" in text
+    assert "|Page 3]]" in text
 
     tools = MCPTools(cfg)
     out = tools.query_vault_context("apple export", 5)
     assert out["k"] >= 1
-    assert any(row["doc_path"].endswith("apple-export.md") for row in out["results"])
+    assert any(row["doc_path"].endswith("Apple Export.md") for row in out["results"])

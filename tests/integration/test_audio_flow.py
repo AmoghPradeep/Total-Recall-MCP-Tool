@@ -29,7 +29,7 @@ def test_audio_ingestion_end_to_end(tmp_path: Path, monkeypatch) -> None:
     worker = BackgroundWorker(cfg)
     worker.llm_client.transcribe_audio = lambda *_args, **_kwargs: "spoken transcript about learning systems"
     worker.llm_client.chat = lambda *_args, **_kwargs: (
-        '{"fileName":"note","relativePath":"inbox/imported","content":"# Summary\\n\\nspoken transcript about learning systems\\n\\ntags: learning,systems","tags":["learning","systems"]}'
+        '{"fileName":"Learning Systems","relativePath":"Topics/Learning","content":"# Learning Systems\\n\\n## 1. Transcript\\nspoken transcript about learning systems\\n\\n## 2. Summary & Takeaways\\n- learning systems\\n\\n## 3. Tags\\n- learning\\n- systems","tags":["learning","systems"]}'
     )
 
     queued = worker.scan_once()
@@ -37,8 +37,10 @@ def test_audio_ingestion_end_to_end(tmp_path: Path, monkeypatch) -> None:
     metrics = worker.process_queue_once()
     assert metrics["processed"] == 1
 
-    md = vault / "inbox" / "imported" / "note.md"
+    md = vault / "Topics" / "Learning" / "Learning Systems.md"
     assert md.exists()
     text = md.read_text(encoding="utf-8")
-    assert "# Summary" in text
-    assert "tags:" in text
+    assert not text.startswith("# ")
+    assert "## Sources" in text
+    assert "[[z.rawdata/audio/note_" in text
+    assert "|Original Audio]]" in text

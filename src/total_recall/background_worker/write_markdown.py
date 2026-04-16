@@ -3,66 +3,14 @@ import logging
 import re
 from pathlib import Path
 
+from total_recall.background_worker.output_policy import (
+    FALLBACK_RELATIVE_DIR,
+    canonicalize_markdown_content,
+    safe_filename,
+    sanitize_relative_dir,
+)
+
 LOG = logging.getLogger(__name__)
-FALLBACK_RELATIVE_DIR = Path("inbox") / "imported"
-
-
-def _safe_filename(name: str) -> str:
-    name = name.strip()
-    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "-", name)
-    name = re.sub(r"\s+", " ", name)
-    cleaned = name[:150].strip(" .")
-    return cleaned or "Untitled Note"
-
-
-def _safe_segment(segment: str) -> str:
-    segment = segment.strip()
-    segment = re.sub(r'[<>:"\\|?*\x00-\x1f]', "-", segment)
-    segment = re.sub(r"\s+", " ", segment)
-    segment = segment.strip(" .")
-    return segment
-
-
-def sanitize_relative_dir(raw_relative_path: object) -> tuple[Path, bool, str]:
-    """
-    Return (relative_dir, used_fallback, reason).
-    """
-    if not isinstance(raw_relative_path, str):
-        return FALLBACK_RELATIVE_DIR, True, "relativePath missing or non-string"
-
-    proposed = raw_relative_path.strip()
-    if not proposed:
-        return FALLBACK_RELATIVE_DIR, True, "relativePath empty"
-
-    normalized = proposed.replace("\\", "/")
-    lowered = normalized.lower()
-
-    is_absolute_like = (
-        bool(re.match(r"^[a-zA-Z]:", normalized))
-        or normalized.startswith("/")
-        or normalized.startswith("//")
-        or normalized.startswith("\\\\")
-        or bool(re.match(r"^[a-zA-Z]--", normalized))
-        or lowered.startswith("c--users")
-    )
-    if is_absolute_like:
-        return FALLBACK_RELATIVE_DIR, True, f"absolute or malformed path: {proposed}"
-
-    parts: list[str] = []
-    for raw_part in normalized.split("/"):
-        part = raw_part.strip()
-        if not part or part == ".":
-            continue
-        if part == "..":
-            return FALLBACK_RELATIVE_DIR, True, f"path traversal segment in: {proposed}"
-        safe = _safe_segment(part)
-        if safe:
-            parts.append(safe)
-
-    if not parts:
-        return FALLBACK_RELATIVE_DIR, True, "relativePath sanitized to empty"
-
-    return Path(*parts), False, ""
 
 
 def resolve_safe_output_dir(vault_root: Path, raw_relative_path: object) -> tuple[Path, bool]:
@@ -84,7 +32,11 @@ def resolve_safe_output_dir(vault_root: Path, raw_relative_path: object) -> tupl
     return candidate, used_fallback
 
 
-def process_json_response(json_parameters: str, obsidian_vault_path: Path) -> tuple[Path, list[str]]:
+def process_json_response(
+    json_parameters: str,
+    obsidian_vault_path: Path,
+    source_links: list[str] | None = None,
+) -> tuple[Path, list[str]]:
     """
     Parses LLM JSON output and creates a markdown file in the given Obsidian vault.
 
@@ -112,10 +64,11 @@ def process_json_response(json_parameters: str, obsidian_vault_path: Path) -> tu
         raise ValueError(f"Invalid JSON input: {e}")
 
     # Extract fields
-    file_name = _safe_filename(str(data.get("fileName", "Untitled Note")))
+    file_name = safe_filename(str(data.get("fileName", "Untitled Note")))
     output_dir, _ = resolve_safe_output_dir(obsidian_vault_path, data.get("relativePath", ""))
 
-    content = data.get("content", "")
+    raw_content = str(data.get("content", ""))
+    content = canonicalize_markdown_content(raw_content, source_links=source_links)
     tags = data.get("tags", [])
 
     if not isinstance(tags, list):
@@ -124,7 +77,7 @@ def process_json_response(json_parameters: str, obsidian_vault_path: Path) -> tu
 
     tags = [str(tag).strip() for tag in tags if str(tag).strip()]
 
-    if not content:
+    if not content.strip():
         LOG.error("Refusing to create markdown file with empty content vault_path=%s file_name=%s", obsidian_vault_path, file_name)
         raise ValueError("Content is empty. Cannot create markdown file.")
 

@@ -36,7 +36,7 @@ def test_pdf_ingestion_end_to_end(tmp_path: Path, monkeypatch) -> None:
         if "Choose up to 5 domain tags" in prompt:
             return "notes,learning"
         if "Create a normalized Obsidian markdown note" in prompt:
-            return '{"fileName":"handwritten","relativePath":"inbox/imported","content":"# Title\\n\\n## Extracted Notes\\n- handwritten bullet\\n\\n## Summary\\nShort summary\\n\\n## Source\\n[[z.rawdata/pdf/handwritten_fakehash.pdf]]","tags":["notes","learning"]}'
+            return '{"fileName":"Handwritten Notes","relativePath":"References/Scans","content":"# Handwritten Notes\\n\\n## 1. Transcript\\n- handwritten bullet\\n\\n## 2. Summary & Takeaways\\n- Short summary\\n\\n## Source\\n[[z.rawdata/pdf/handwritten_fakehash.pdf]]","tags":["notes","learning"]}'
         return ""
 
     (pdf / "handwritten.pdf").write_bytes(b"fake pdf")
@@ -56,7 +56,9 @@ def test_pdf_ingestion_end_to_end(tmp_path: Path, monkeypatch) -> None:
     copied_raw = vault / "z.rawdata" / "pdf" / "handwritten_fakehash.pdf"
     assert copied_raw.exists()
 
-    md = vault / "inbox" / "imported" / "handwritten.md"
+    md = vault / "References" / "Scans" / "Handwritten Notes.md"
     assert md.exists()
     text = md.read_text(encoding="utf-8")
-    assert "[[z.rawdata/pdf/handwritten_fakehash.pdf]]" in text
+    assert "\n## Source\n" not in text
+    assert text.count("## Sources") == 1
+    assert "[[z.rawdata/pdf/handwritten_fakehash.pdf|Original PDF]]" in text

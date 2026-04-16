@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import logging
-import re
 from pathlib import Path
 
+from total_recall.background_worker.output_policy import build_directory_hint
 from total_recall.background_worker.system_prompts import (
     get_page_document_note_json_prompt,
     get_pdf_page_extract_prompt,
@@ -24,7 +24,7 @@ def process_page_images_to_markdown(
     output_md: Path,
     llm_client: OpenAICompatibleClient,
     tag_catalog: TagCatalog,
-    source_backlinks: list[str],
+    source_links: list[str],
 ) -> JobResult:
     try:
         vault_root = output_md if output_md.is_dir() else output_md.parent
@@ -57,8 +57,8 @@ def process_page_images_to_markdown(
             ", ".join(tags),
             full_content,
             reduced_summary,
-            _dir_structure(vault_root),
-            "\n".join(source_backlinks),
+            build_directory_hint(vault_root),
+            "\n".join(source_links),
         )
         LOG.debug("Requesting normalized markdown document source=%s chosen_tags=%s", source_path, len(tags))
         json_response = llm_client.chat(
@@ -66,8 +66,7 @@ def process_page_images_to_markdown(
             require_success=True,
         )
 
-        note_path, parsed_tags = process_json_response(json_response, vault_root)
-        _upsert_source_section(note_path, source_backlinks)
+        note_path, parsed_tags = process_json_response(json_response, vault_root, source_links=source_links)
         final_tags = parsed_tags if parsed_tags else tags
         tag_catalog.persist_doc_tags(str(note_path), final_tags)
         LOG.info("Completed page document pipeline source=%s output_doc=%s tag_count=%s", source_path, note_path, len(final_tags))
@@ -75,19 +74,6 @@ def process_page_images_to_markdown(
     except Exception as exc:
         LOG.exception("Page document pipeline failed source=%s", source_path)
         return JobResult(source_path=source_path, success=False, message=str(exc), output_doc=None)
-
-
-def build_vault_backlink(vault_root: Path, source_path: Path) -> str:
-    rel = source_path.resolve().relative_to(vault_root.resolve())
-    return f"[[{rel.as_posix()}]]"
-
-
-def _dir_structure(vault_root: Path) -> str:
-    return ",".join(
-        str(p.relative_to(vault_root))
-        for p in vault_root.rglob("*")
-        if p.is_dir() and "z.rawdata" not in str(p)
-    )
 
 
 def _choose_tags(content: str, llm_client: OpenAICompatibleClient, tag_catalog: TagCatalog) -> list[str]:
@@ -102,20 +88,3 @@ def _choose_tags(content: str, llm_client: OpenAICompatibleClient, tag_catalog: 
     tags = sorted(set(reusable + new_tags))
     LOG.debug("Selected page-document tags candidate_count=%s final_count=%s", len(candidates), len(tags[:5] if tags else ['general-knowledge']))
     return tags[:5] if tags else ["general-knowledge"]
-
-
-def _upsert_source_section(note_path: Path, source_backlinks: list[str]) -> None:
-    unique_links = list(dict.fromkeys(link for link in source_backlinks if link))
-    if not unique_links:
-        return
-
-    body = unique_links[0] if len(unique_links) == 1 else "\n".join(f"- {link}" for link in unique_links)
-    replacement = f"## Source\n{body}\n"
-    content = note_path.read_text(encoding="utf-8")
-    pattern = re.compile(r"(?ms)^## Source\n.*?(?=^## |\Z)")
-    if pattern.search(content):
-        updated = pattern.sub(replacement, content).rstrip() + "\n"
-    else:
-        updated = content.rstrip() + "\n\n" + replacement
-    note_path.write_text(updated, encoding="utf-8")
-    LOG.debug("Updated source section note_path=%s backlink_count=%s", note_path, len(unique_links))
